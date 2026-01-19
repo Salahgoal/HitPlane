@@ -9,7 +9,7 @@
 #include<conio.h>
 // Windows API头文件（GetAsyncKeyState/PlaySound/GetTickCount等）
 #include<Windows.h>
-
+//aaa
 // 链接多媒体库（PlaySound播放音效必须）
 #pragma comment(lib,"winmm.lib")
 // 链接透明贴图库（TransparentBlt实现图片透明必须）
