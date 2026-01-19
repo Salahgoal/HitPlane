@@ -81,7 +81,7 @@ int main() {
 			char key = _getch(); // 获取按下的按键
 			if (key == 27) {     // 判断是否是ESC键
 				break;           // 跳出循环，结束游戏
-			}
+}
 		}
 	}
 
