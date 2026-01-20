@@ -50,6 +50,7 @@ static DWORD lastEnemyTime = 0;// 上次生成敌机的时间（毫秒级，避免敌机瞬间生成）
 static DWORD lastShootTime = 0;// 上次发射子弹的时间（毫秒级，实现发射冷却）
 IMAGE img[3];	               // 图片数组：0=背景图 1=敌机图 2=玩家飞机图
 int score = 0;                 // 游戏分数（当前阶段暂未用到，保留）
+bool gameover = false;
 
 // 函数声明
 void initGame();               // 游戏初始化（窗口、参数）
@@ -57,6 +58,7 @@ void drawGame();               // 绘制游戏画面（背景、飞机、子弹、分数）
 void updateGame();             // 更新游戏逻辑（移动、发射、敌机生成）
 void putimageAlpha(int x, int y, IMAGE* img); // 透明贴图函数
 void initEnemyPlane();         // 生成敌机函数
+bool isCircleCrash(POS c1, POS c2, int r1, int r2);// 圆形碰撞检测函数
 
 int main() {
 	// 1. 初始化游戏（创建窗口、重置参数）
@@ -70,11 +72,11 @@ int main() {
 	// 加载玩家飞机图：路径img/planeNormal_2.png，尺寸PLANE_SIZE×PLANE_SIZE
 	loadimage(&img[2], _T("img/planeNormal_2.png"), PLANE_SIZE, PLANE_SIZE);
 
-	// 3. 游戏主循环（无限循环，直到按ESC退出）
-	while (true) {
+	// 3. 游戏主循环（无限循环，直到按ESC退出或飞机碰撞）
+	while (!gameover) {
 		drawGame();   // 绘制当前帧画面
 		updateGame(); // 更新当前帧逻辑
-		Sleep(1000 / 60);// 控制帧率（1秒60帧，约16ms/帧，避免画面卡顿）
+		Sleep(10);
 
 		// 检测ESC键（ASCII码27），按下则退出游戏
 		if (_kbhit()) {          // 检查是否有按键按下（非阻塞）
@@ -202,9 +204,8 @@ void updateGame() {
 	// 3. 子弹发射逻辑
 	// VK_SPACE是空格的虚拟键码，&0x8000检测是否按下
 	if (GetAsyncKeyState(VK_SPACE) & 0x8000) {
-		// 条件1：子弹数量未超限  条件2：200毫秒冷却
 		if (myPlane.bulletLen < BULLET_NUM && GetTickCount() - lastShootTime > 200) {
-			PlaySound("img/f_gun.wav", NULL, SND_FILENAME | SND_ASYNC | SND_NOWAIT);
+			PlaySound(_T("img/man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_NOWAIT);
 			myPlane.planeBullets[myPlane.bulletLen] = myPlane.planePos;
 			myPlane.bulletLen++;
 			lastShootTime = GetTickCount();
@@ -221,6 +222,68 @@ void updateGame() {
 	for (int i = 0; i < myPlane.bulletLen; i++) {
 		// 子弹y坐标减少（向上飞），速度为myPlane.bulletSpeed=3
 		myPlane.planeBullets[i].y -= myPlane.bulletSpeed;
+	}
+
+	// 6. 子弹边界清理(倒序遍历)
+	for (int j = myPlane.bulletLen - 1; j >= 0;j--) {
+		if (myPlane.planeBullets[j].y < 0) {
+			//数组前移删除
+			for (int k = j; k < myPlane.bulletLen - 1; k++) {
+				myPlane.planeBullets[k] = myPlane.planeBullets[k + 1];
+			}
+			myPlane.bulletLen--;
+		}
+
+	}
+
+	// 7. 敌机边界清理
+	for (int i = enemyPlaneLen - 1; i >= 0; i--) {
+		if (enemyPlanes[i].planePos.y > SCREEN_HEIGHT + PLANE_SIZE) {
+			// 数组前移删除
+			for (int j = i; j < enemyPlaneLen - 1; j++) {
+				enemyPlanes[j] = enemyPlanes[j + 1];
+			}
+			enemyPlaneLen--;
+		}
+	}
+	
+	//8.检查子弹与敌机的碰撞
+	//倒序遍历子弹
+	for (int j = myPlane.bulletLen - 1; j >= 0;j--) {
+		//倒序遍历敌机
+		for (int i = enemyPlaneLen - 1; i >= 0; i--) {
+			if (isCircleCrash(myPlane.planeBullets[j], enemyPlanes[i].planePos, 5, PLANE_SIZE / 2)) {
+				//子弹击中敌机加分并删除子弹
+				score += 10;
+				//销毁当前子弹（数组前移）
+				for (int k = j; k < myPlane.bulletLen - 1; k++) {
+					myPlane.planeBullets[k] = myPlane.planeBullets[k + 1];
+				}
+				myPlane.bulletLen--;
+				//销毁当前敌机（数组前移）
+				for (int k = i; k < enemyPlaneLen - 1; k++) {
+					enemyPlanes[k] = enemyPlanes[k + 1];
+				}
+				enemyPlaneLen--;
+
+				break; //跳出敌机循环，检查下一颗子弹
+			}
+		}
+	}
+
+	//9.检测我机与敌机的碰撞
+	for (int i = 0; i < enemyPlaneLen; i++) {
+		if (isCircleCrash(myPlane.planePos, enemyPlanes[i].planePos, PLANE_SIZE / 2, PLANE_SIZE / 2)) {
+			//定义缓冲区存格式化后的提示文本
+			TCHAR msg[100];
+			//把socre的值格式化到msg中
+			_stprintf_s(msg, _T("Manba Out! 你和牢大合砍:%d分"), score);
+			PlaySound(_T("img/Manbaout.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_NOWAIT);
+			//弹出消息框显示最终得分
+			MessageBox(NULL, msg, _T("Manba Out!"), MB_OK);
+			gameover = true;
+			break;
+		}
 	}
 }
 
@@ -249,4 +312,17 @@ void initEnemyPlane() {
 			lastEnemyTime = GetTickCount();
 		}
 	}
+}
+// 检测圆形碰撞函数：判断玩家飞机与敌机是否碰撞
+// c1/c2：两个圆心坐标；r1/r2：两个圆的半径
+//参数:子弹(我机)圆心坐标,敌机圆心坐标,子弹半径,敌机半径
+bool isCircleCrash(POS c1,POS c2,int r1,int r2) {
+	//计算两个圆心的x、y差值
+	int dx = c1.x - c2.x;
+	int dy = c1.y - c2.y;
+	//计算距离的平方和半径的平方
+	int distanceSq = dx * dx + dy * dy;
+	int radiusSumSq = (r1 + r2) * (r1 + r2);
+	//判断是否碰撞:距离平方小于等于半径平方和则碰撞
+	return distanceSq <= radiusSumSq;
 }
