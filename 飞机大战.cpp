@@ -9,7 +9,8 @@
 #include<conio.h>
 // Windows API头文件（GetAsyncKeyState/PlaySound/GetTickCount等）
 #include<Windows.h>
-//aaa
+//多媒体API，支持多音频通道同时播放
+#include<mmsystem.h>
 // 链接多媒体库（PlaySound播放音效必须）
 #pragma comment(lib,"winmm.lib")
 // 链接透明贴图库（TransparentBlt实现图片透明必须）
@@ -51,6 +52,10 @@ static DWORD lastShootTime = 0;// 上次发射子弹的时间（毫秒级，实现发射冷却）
 IMAGE img[3];	               // 图片数组：0=背景图 1=敌机图 2=玩家飞机图
 int score = 0;                 // 游戏分数（当前阶段暂未用到，保留）
 bool gameover = false;
+float enemySpeed = ENEMY_SPEED; // 敌机下落速度（随着分数增加可动态调整）
+int lastScoreForSpeed = 0;		//记录上次提升速度时的分数
+
+
 
 // 函数声明
 void initGame();               // 游戏初始化（窗口、参数）
@@ -65,8 +70,7 @@ int main() {
 	initGame();
 
 	// 2. 加载游戏图片
-	// 加载背景图：路径img/background.jpg，尺寸适配窗口
-	loadimage(&img[0], _T("img/background.jpg"), SCREEN_WIDTH, SCREEN_HEIGHT);
+	loadimage(&img[0], _T("img/back.png"), SCREEN_WIDTH, SCREEN_HEIGHT);
 	// 加载敌机图：路径img/enemyPlane2.png，尺寸PLANE_SIZE×PLANE_SIZE
 	loadimage(&img[1], _T("img/enemyPlane2.png"), PLANE_SIZE, PLANE_SIZE);
 	// 加载玩家飞机图：路径img/planeNormal_2.png，尺寸PLANE_SIZE×PLANE_SIZE
@@ -89,6 +93,9 @@ int main() {
 
 	// 4. 关闭图形窗口（释放资源，规范写法）
 	closegraph();
+	mciSendString(_T("stop bgm"), NULL,0, NULL);
+	mciSendString(_T("close bgm"), NULL, 0, NULL);
+
 	return 0; // 程序正常退出
 }
 
@@ -112,6 +119,11 @@ void initGame() {
 	myPlane.planePos = { SCREEN_WIDTH / 2, SCREEN_HEIGHT - 100 };
 	// 敌机数量初始化为0（屏幕上无敌机）
 	enemyPlaneLen = 0;
+	
+	//播放BGM，使用mciSendStringAPI来播放，需要引用头文件<mmsystem>
+	mciSendString(_T("open \"img/seeyouagain.mp3\" alias bgm"), NULL, 0, NULL);
+	mciSendString(_T("play bgm repeat"), NULL, 0, NULL);
+	 
 }
 
 // 透明贴图函数：解决图片白色背景问题，让飞机图片更自然
@@ -170,12 +182,18 @@ void drawGame() {
 	// 绘制文字：居中、垂直居中、单行显示
 	drawtext(scoreText, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-	// 结束批量绘制（一次性显示所有缓存的绘制内容，防闪烁）
+	// 结束批量绘制
 	EndBatchDraw();
 }
 
 // 更新游戏逻辑函数：处理移动、发射、敌机生成
 void updateGame() {
+
+	//敌机速度随分数增加而增加
+	if (score >= lastScoreForSpeed+50&& enemySpeed<=3.0) {
+		enemySpeed += 0.2;
+		lastScoreForSpeed = score;
+	}
 	// 1. 调用敌机生成函数（每帧执行，检查是否该生成新敌机）
 	initEnemyPlane();
 
@@ -215,7 +233,7 @@ void updateGame() {
 	// 4. 敌机下落逻辑（遍历所有敌机，每帧向下移动）
 	for (int i = 0; i < enemyPlaneLen; i++) {
 		// 使用定义的ENEMY_SPEED常量（1.0），而非硬编码
-		enemyPlanes[i].planePos.y += ENEMY_SPEED;
+		enemyPlanes[i].planePos.y += enemySpeed;
 	}
 
 	// 5. 子弹移动逻辑（遍历所有子弹，每帧向上移动）
@@ -316,6 +334,7 @@ void initEnemyPlane() {
 // 检测圆形碰撞函数：判断玩家飞机与敌机是否碰撞
 // c1/c2：两个圆心坐标；r1/r2：两个圆的半径
 //参数:子弹(我机)圆心坐标,敌机圆心坐标,子弹半径,敌机半径
+
 bool isCircleCrash(POS c1,POS c2,int r1,int r2) {
 	//计算两个圆心的x、y差值
 	int dx = c1.x - c2.x;
