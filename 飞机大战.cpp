@@ -120,7 +120,7 @@ void initGame() {
 	// 敌机数量初始化为0（屏幕上无敌机）
 	enemyPlaneLen = 0;
 	
-	//播放BGM，使用mciSendStringAPI来播放，需要引用头文件<mmsystem>
+	//播放BGM，使用mciSendStringAPI来播放，需要引用头文件<mmsystem>////
 	mciSendString(_T("open \"img/seeyouagain.mp3\" alias bgm"), NULL, 0, NULL);
 	mciSendString(_T("play bgm repeat"), NULL, 0, NULL);
 	 
